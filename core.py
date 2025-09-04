@@ -125,6 +125,9 @@ class UIChoiceDefaults:
     # 复习时的默认表现评级
     review_performance_default: str = "g"  # good
     
+    # 复习模式默认选择
+    review_mode_default: str = "1"  # 单词→释义模式
+    
     # 词汇表管理默认排序
     vocabulary_sort_default: str = "1"  # 按字母顺序
     

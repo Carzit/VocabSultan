@@ -3,9 +3,6 @@
 """
 单词记忆程序 - Rich CLI版本
 使用Rich库提供美观的命令行界面
-
-使用方法:
-python rich_cli.py
 """
 
 import sys
@@ -331,12 +328,13 @@ class RichCliUI:
                 actions.append("p")
             if page < total_pages:
                 actions.append("n")
-            actions.extend(["s", "e", "d", "b"])
+            actions.extend(["s", "v", "e", "d", "b"])
             
             action_descriptions = {
                 "p": "上一页",
                 "n": "下一页", 
                 "s": "选择单词",
+                "v": "批量查看",
                 "e": "批量编辑",
                 "d": "批量删除",
                 "b": "返回主菜单"
@@ -354,6 +352,8 @@ class RichCliUI:
                 page += 1
             elif choice == "s":
                 self.select_word_from_list(words)
+            elif choice == "v":
+                self.batch_view_words(words)
             elif choice == "e":
                 self.batch_edit_words(words)
             elif choice == "d":
@@ -408,29 +408,28 @@ class RichCliUI:
     def batch_edit_words(self, words: List[Word]):
         """批量编辑单词"""
         self.console.print("🔧 批量编辑功能")
-        self.console.print("选择要编辑的单词 (输入数字，用逗号分隔，如: 1,3,5)")
+        self.console.print("支持格式:")
+        self.console.print("  • 单个数字: 1")
+        self.console.print("  • 多个数字: 1,3,5")
+        self.console.print("  • 范围格式: 1-10")
+        self.console.print("  • 混合格式: 1,3-5,8")
         
-        try:
-            selection = Prompt.ask("选择单词编号")
-            if not selection.strip():
-                return
-            
-            indices = [int(x.strip()) - 1 for x in selection.split(',')]
-            selected_words = [words[i] for i in indices if 0 <= i < len(words)]
-            
-            if not selected_words:
-                self.console.print("❌ 没有选择有效的单词", style="red")
-                return
-            
-            self.console.print(f"已选择 {len(selected_words)} 个单词:")
-            self.display_word_brief_list(selected_words)
-            
-            if Confirm.ask("确认编辑这些单词?", 
-                          default=self.core.config.ui_defaults.confirm_batch_edit):
-                self.batch_edit_selected_words(selected_words)
-                
-        except Exception as e:
-            self.console.print(f"❌ 输入格式错误: {e}", style="red")
+        selection = Prompt.ask("选择要编辑的单词")
+        if not selection.strip():
+            return
+        
+        indices = self._parse_selection_range(selection, len(words))
+        if not indices:
+            self.console.print("❌ 没有选择有效的单词", style="red")
+            return
+        
+        selected_words = [words[i] for i in indices]
+        self.console.print(f"已选择 {len(selected_words)} 个单词:")
+        self.display_word_brief_list(selected_words)
+        
+        if Confirm.ask("确认编辑这些单词?", 
+                      default=self.core.config.ui_defaults.confirm_batch_edit):
+            self.batch_edit_selected_words(selected_words)
     
     def batch_edit_selected_words(self, words: List[Word]):
         """批量编辑选中的单词"""
@@ -545,35 +544,34 @@ class RichCliUI:
     def batch_delete_words(self, words: List[Word]):
         """批量删除单词"""
         self.console.print("⚠️  批量删除功能")
-        self.console.print("选择要删除的单词 (输入数字，用逗号分隔，如: 1,3,5)")
+        self.console.print("支持格式:")
+        self.console.print("  • 单个数字: 1")
+        self.console.print("  • 多个数字: 1,3,5")
+        self.console.print("  • 范围格式: 1-10")
+        self.console.print("  • 混合格式: 1,3-5,8")
         
-        try:
-            selection = Prompt.ask("选择单词编号")
-            if not selection.strip():
-                return
+        selection = Prompt.ask("选择要删除的单词")
+        if not selection.strip():
+            return
+        
+        indices = self._parse_selection_range(selection, len(words))
+        if not indices:
+            self.console.print("❌ 没有选择有效的单词", style="red")
+            return
+        
+        selected_words = [words[i] for i in indices]
+        self.console.print(f"⚠️  即将删除 {len(selected_words)} 个单词:")
+        self.display_word_brief_list(selected_words)
+        
+        if Confirm.ask("确认删除这些单词? (此操作不可撤销)", 
+                      default=self.core.config.ui_defaults.confirm_delete):
+            word_ids = [w.id for w in selected_words]
+            success_count, fail_count = self.core.delete_words_batch(word_ids)
             
-            indices = [int(x.strip()) - 1 for x in selection.split(',')]
-            selected_words = [words[i] for i in indices if 0 <= i < len(words)]
-            
-            if not selected_words:
-                self.console.print("❌ 没有选择有效的单词", style="red")
-                return
-            
-            self.console.print(f"⚠️  即将删除 {len(selected_words)} 个单词:")
-            self.display_word_brief_list(selected_words)
-            
-            if Confirm.ask("确认删除这些单词? (此操作不可撤销)", 
-                          default=self.core.config.ui_defaults.confirm_delete):
-                word_ids = [w.id for w in selected_words]
-                success_count, fail_count = self.core.delete_words_batch(word_ids)
-                
-                if success_count > 0:
-                    self.console.print(f"✅ 成功删除 {success_count} 个单词", style="green")
-                if fail_count > 0:
-                    self.console.print(f"❌ 删除失败 {fail_count} 个单词", style="red")
-                
-        except Exception as e:
-            self.console.print(f"❌ 输入格式错误: {e}", style="red")
+            if success_count > 0:
+                self.console.print(f"✅ 成功删除 {success_count} 个单词", style="green")
+            if fail_count > 0:
+                self.console.print(f"❌ 删除失败 {fail_count} 个单词", style="red")
     
     def search_words(self):
         """搜索单词"""
@@ -731,9 +729,24 @@ class RichCliUI:
         self.console.print(Rule("[bold]开始复习[/bold]"))
         self.console.print(f"📚 共有 {len(review_words)} 个单词需要复习\n")
         
-        self.review_specific_words(review_words)
+        # 选择复习模式
+        review_modes = [
+            ("1", "🔤 单词→释义", "给出单词，回忆释义"),
+            ("2", "📖 释义→单词", "给出释义，选择对应单词"),
+            ("3", "🔄 混合模式", "随机切换两种模式"),
+        ]
+        
+        self.console.print("选择复习模式:")
+        for key, title, desc in review_modes:
+            self.console.print(f"  {key}. {title} - {desc}")
+        
+        mode_choice = Prompt.ask("选择模式", choices=[m[0] for m in review_modes], 
+                                default=self.core.config.ui_defaults.review_mode_default)
+        
+        mode = review_modes[int(mode_choice) - 1][0]
+        self.review_specific_words(review_words, mode)
     
-    def review_specific_words(self, words: List[Word]):
+    def review_specific_words(self, words: List[Word], mode: str = "1"):
         """复习指定单词列表"""
         if not words:
             return
@@ -746,57 +759,27 @@ class RichCliUI:
             self.console.print(f"复习进度: {i}/{len(words)}")
             self.console.print(f"{'='*50}")
             
-            # 显示单词
-            self.console.print(f"\n🔤 单词: [bold blue]{word.word}[/bold blue]")
-            
-            if word.core_info.pronunciation:
-                self.console.print(f"🔊 发音: {word.core_info.pronunciation}")
-            
-            # 让用户思考
-            input("\n💭 请回忆这个单词的含义，按回车查看答案...")
-            
-            # 显示答案
-            self.console.print(f"\n📖 释义: [green]{word.core_info.primary_definition}[/green]")
-            
-            if word.extended_info.examples:
-                self.console.print(f"📝 例句: {word.extended_info.examples[0]}")
-            
-            if word.notes:
-                self.console.print("📝 笔记:")
-                for note in word.notes[:2]:  # 显示前2个笔记
-                    self.console.print(f"   💬 {note.get_simplified_display()}")
-            
-            # 评估掌握程度
-            performance_options = [
-                ("excellent", "😍 完全记住"),
-                ("good", "😊 基本记住"),
-                ("fair", "😐 模糊记得"),
-                ("poor", "😵 完全忘记")
-            ]
-            
-            self.console.print("\n评估你的掌握程度:")
-            for key, desc in performance_options:
-                self.console.print(f"  {key[0]}. {desc}")
-            
-            performance = Prompt.ask(
-                "选择",
-                choices=['e', 'g', 'f', 'p'],
-                default=self.core.config.ui_defaults.review_performance_default
-            )
-            
-            # 映射选择到性能评级
-            perf_map = {'e': 'excellent', 'g': 'good', 'f': 'fair', 'p': 'poor'}
-            performance_level = perf_map[performance]
+            # 根据模式选择复习方式
+            if mode == "1":  # 单词→释义
+                performance_level = self._review_word_to_definition(word)
+            elif mode == "2":  # 释义→单词
+                performance_level = self._review_definition_to_word(word, words)
+            else:  # 混合模式
+                import random
+                if random.choice([True, False]):
+                    performance_level = self._review_word_to_definition(word)
+                else:
+                    performance_level = self._review_definition_to_word(word, words)
             
             # 更新复习记录
             self.core.update_word_after_review(word.id, performance_level)
             
             reviewed += 1
-            if performance in ['e', 'g']:
+            if performance_level in ['excellent', 'good']:
                 correct += 1
             
             # 显示反馈
-            if performance in ['e', 'g']:
+            if performance_level in ['excellent', 'good']:
                 self.console.print("🎉 很棒！继续保持", style="green")
             else:
                 self.console.print("💪 需要多复习，加油！", style="yellow")
@@ -814,6 +797,294 @@ class RichCliUI:
         
         # 显示复习总结
         self.show_review_summary(reviewed, correct, len(words))
+    
+    def _review_word_to_definition(self, word: Word) -> str:
+        """单词→释义复习模式"""
+        # 显示单词
+        self.console.print(f"\n🔤 单词: [bold blue]{word.word}[/bold blue]")
+        
+        if word.core_info.pronunciation:
+            self.console.print(f"🔊 发音: {word.core_info.pronunciation}")
+        
+        # 让用户思考
+        input("\n💭 请回忆这个单词的含义，按回车查看答案...")
+        
+        # 显示答案
+        self.console.print(f"\n📖 释义: [green]{word.core_info.primary_definition}[/green]")
+        
+        if word.extended_info.examples:
+            self.console.print(f"📝 例句: {word.extended_info.examples[0]}")
+        
+        if word.notes:
+            self.console.print("📝 笔记:")
+            for note in word.notes[:2]:  # 显示前2个笔记
+                self.console.print(f"   💬 {note.get_simplified_display()}")
+        
+        # 评估掌握程度
+        return self._get_performance_rating()
+    
+    def _review_definition_to_word(self, word: Word, all_words: List[Word]) -> str:
+        """释义→单词复习模式"""
+        # 准备选项（包含正确答案和干扰项）
+        options = self._prepare_word_options(word, all_words)
+        
+        # 显示释义
+        self.console.print(f"\n📖 释义: [bold green]{word.core_info.primary_definition}[/bold green]")
+        
+        if word.core_info.part_of_speech:
+            self.console.print(f"📝 词性: {word.core_info.part_of_speech}")
+        
+        # 显示选项
+        self.console.print("\n请选择对应的单词:")
+        for i, option_word in enumerate(options, 1):
+            self.console.print(f"  {i}. {option_word.word}")
+        
+        # 获取用户选择
+        while True:
+            try:
+                choice = IntPrompt.ask("选择答案", default=1)
+                if 1 <= choice <= len(options):
+                    selected_word = options[choice - 1]
+                    break
+                else:
+                    self.console.print("❌ 请输入有效的选项编号", style="red")
+            except:
+                self.console.print("❌ 请输入有效的数字", style="red")
+        
+        # 显示结果
+        if selected_word.id == word.id:
+            self.console.print("✅ 回答正确！", style="green")
+            if word.core_info.pronunciation:
+                self.console.print(f"🔊 发音: {word.core_info.pronunciation}")
+            if word.extended_info.examples:
+                self.console.print(f"📝 例句: {word.extended_info.examples[0]}")
+        else:
+            self.console.print(f"❌ 回答错误！正确答案是: [bold blue]{word.word}[/bold blue]", style="red")
+            if word.core_info.pronunciation:
+                self.console.print(f"🔊 发音: {word.core_info.pronunciation}")
+        
+        # 评估掌握程度
+        return self._get_performance_rating()
+    
+    def _prepare_word_options(self, target_word: Word, all_words: List[Word], num_options: int = 4) -> List[Word]:
+        """准备单词选择选项"""
+        import random
+        
+        # 确保包含正确答案
+        options = [target_word]
+        
+        # 添加干扰项（相似长度或状态的单词）
+        other_words = [w for w in all_words if w.id != target_word.id]
+        
+        # 优先选择长度相近的单词
+        similar_length_words = [w for w in other_words 
+                               if abs(len(w.word) - len(target_word.word)) <= 2]
+        
+        if similar_length_words:
+            options.extend(random.sample(similar_length_words, 
+                                       min(num_options - 1, len(similar_length_words))))
+        else:
+            options.extend(random.sample(other_words, 
+                                       min(num_options - 1, len(other_words))))
+        
+        # 随机打乱选项顺序
+        random.shuffle(options)
+        return options[:num_options]
+    
+    def _get_performance_rating(self) -> str:
+        """获取用户表现评级"""
+        performance_options = [
+            ("excellent", "😍 完全记住"),
+            ("good", "😊 基本记住"),
+            ("fair", "😐 模糊记得"),
+            ("poor", "😵 完全忘记")
+        ]
+        
+        self.console.print("\n评估你的掌握程度:")
+        for key, desc in performance_options:
+            self.console.print(f"  {key[0]}. {desc}")
+        
+        performance = Prompt.ask(
+            "选择",
+            choices=['e', 'g', 'f', 'p'],
+            default=self.core.config.ui_defaults.review_performance_default
+        )
+        
+        # 映射选择到性能评级
+        perf_map = {'e': 'excellent', 'g': 'good', 'f': 'fair', 'p': 'poor'}
+        return perf_map[performance]
+    
+    def _parse_selection_range(self, selection: str, max_count: int) -> List[int]:
+        """解析选择范围，支持单个数字、逗号分隔、范围格式"""
+        if not selection.strip():
+            return []
+        
+        indices = []
+        parts = [p.strip() for p in selection.split(',')]
+        
+        for part in parts:
+            if '-' in part:
+                # 处理范围格式，如 "1-10"
+                try:
+                    start, end = part.split('-', 1)
+                    start_idx = int(start.strip()) - 1  # 转换为0基索引
+                    end_idx = int(end.strip()) - 1
+                    
+                    # 确保范围有效
+                    start_idx = max(0, start_idx)
+                    end_idx = min(max_count - 1, end_idx)
+                    
+                    if start_idx <= end_idx:
+                        indices.extend(range(start_idx, end_idx + 1))
+                except ValueError:
+                    self.console.print(f"❌ 无效的范围格式: {part}", style="red")
+                    continue
+            else:
+                # 处理单个数字
+                try:
+                    idx = int(part) - 1  # 转换为0基索引
+                    if 0 <= idx < max_count:
+                        indices.append(idx)
+                    else:
+                        self.console.print(f"❌ 索引 {idx + 1} 超出范围 (1-{max_count})", style="red")
+                except ValueError:
+                    self.console.print(f"❌ 无效的数字: {part}", style="red")
+        
+        return sorted(list(set(indices)))  # 去重并排序
+    
+    def batch_view_words(self, words: List[Word]):
+        """批量查看单词"""
+        self.console.print("🔍 批量查看功能")
+        self.console.print("支持格式:")
+        self.console.print("  • 单个数字: 1")
+        self.console.print("  • 多个数字: 1,3,5")
+        self.console.print("  • 范围格式: 1-10")
+        self.console.print("  • 混合格式: 1,3-5,8")
+        self.console.print("  • 按标签查看: tag:标签名")
+        self.console.print("  • 按状态查看: status:状态名")
+        
+        selection = Prompt.ask("选择要查看的单词")
+        if not selection.strip():
+            return
+        
+        # 处理特殊查询
+        if selection.startswith("tag:"):
+            tag_name = selection[4:].strip()
+            selected_words = [w for w in words if tag_name in w.tags]
+            if not selected_words:
+                self.console.print(f"❌ 没有找到标签为 '{tag_name}' 的单词", style="red")
+                return
+            self.console.print(f"📋 找到 {len(selected_words)} 个带有标签 '{tag_name}' 的单词:")
+        elif selection.startswith("status:"):
+            status_name = selection[7:].strip()
+            try:
+                status = WordStatus(status_name)
+                selected_words = [w for w in words if w.status == status]
+                if not selected_words:
+                    self.console.print(f"❌ 没有找到状态为 '{status_name}' 的单词", style="red")
+                    return
+                self.console.print(f"📋 找到 {len(selected_words)} 个状态为 '{status_name}' 的单词:")
+            except ValueError:
+                self.console.print(f"❌ 无效的状态名称: {status_name}", style="red")
+                return
+        else:
+            # 解析数字选择
+            indices = self._parse_selection_range(selection, len(words))
+            if not indices:
+                self.console.print("❌ 没有选择有效的单词", style="red")
+                return
+            
+            selected_words = [words[i] for i in indices]
+            self.console.print(f"📋 已选择 {len(selected_words)} 个单词:")
+        
+        # 显示选中的单词
+        self.display_word_batch_view(selected_words)
+        
+        # 提供后续操作
+        if selected_words:
+            self.console.print("\n后续操作:")
+            batch_actions = [
+                ("1", "开始复习", "立即复习这些单词"),
+                ("2", "批量编辑", "编辑这些单词"),
+                ("3", "批量删除", "删除这些单词"),
+                ("4", "返回", "返回词汇表管理")
+            ]
+            
+            for key, title, desc in batch_actions:
+                self.console.print(f"  {key}. {title} - {desc}")
+            
+            action_choice = Prompt.ask("选择操作", choices=[a[0] for a in batch_actions], default="4")
+            
+            if action_choice == "1":
+                self.review_specific_words(selected_words)
+            elif action_choice == "2":
+                self.batch_edit_selected_words(selected_words)
+            elif action_choice == "3":
+                self.batch_delete_selected_words(selected_words)
+    
+    def display_word_batch_view(self, words: List[Word]):
+        """显示批量查看的单词详情"""
+        for i, word in enumerate(words, 1):
+            self.console.print(f"\n{'='*60}")
+            self.console.print(f"单词 {i}/{len(words)}: [bold blue]{word.word}[/bold blue]")
+            self.console.print(f"{'='*60}")
+            
+            # 基本信息
+            info_parts = []
+            if word.core_info.pronunciation:
+                info_parts.append(f"🔊 {word.core_info.pronunciation}")
+            if word.core_info.part_of_speech:
+                info_parts.append(f"📝 {word.core_info.part_of_speech}")
+            if info_parts:
+                self.console.print(" | ".join(info_parts))
+            
+            # 释义
+            self.console.print(f"📖 {word.core_info.primary_definition}")
+            
+            # 扩展信息
+            if word.extended_info.examples:
+                self.console.print("\n📚 例句:")
+                for example in word.extended_info.examples[:2]:  # 最多显示2个例句
+                    self.console.print(f"   • {example}")
+            
+            if word.extended_info.synonyms:
+                self.console.print(f"\n🔗 同义词: {', '.join(word.extended_info.synonyms)}")
+            
+            # 标签
+            if word.tags:
+                tags_text = " ".join(f"[dim]#{tag}[/dim]" for tag in word.tags)
+                self.console.print(f"\n🏷️  {tags_text}")
+            
+            # 笔记
+            if word.notes:
+                self.console.print("\n💬 笔记:")
+                for note in word.notes[:3]:  # 最多显示3个笔记
+                    self.console.print(f"   📝 {note.get_simplified_display(40)}")
+            
+            # 学习数据
+            status_icon = self.status_icons.get(word.status, "?")
+            status_color = self.status_colors.get(word.status, "white")
+            learning_info = (
+                f"📊 状态: [{status_color}]{status_icon} {word.status.value}[/{status_color}] | "
+                f"完整度: {word.completeness:.1%} | "
+                f"复习: {word.learning_data.review_count}次"
+            )
+            self.console.print(f"\n{learning_info}")
+    
+    def batch_delete_selected_words(self, words: List[Word]):
+        """删除选中的单词"""
+        self.console.print(f"⚠️  即将删除 {len(words)} 个单词:")
+        self.display_word_brief_list(words)
+        
+        if Confirm.ask("确认删除这些单词? (此操作不可撤销)", 
+                      default=self.core.config.ui_defaults.confirm_delete):
+            word_ids = [w.id for w in words]
+            success_count, fail_count = self.core.delete_words_batch(word_ids)
+            
+            if success_count > 0:
+                self.console.print(f"✅ 成功删除 {success_count} 个单词", style="green")
+            if fail_count > 0:
+                self.console.print(f"❌ 删除失败 {fail_count} 个单词", style="red")
     
     def show_review_summary(self, reviewed: int, correct: int, total: int):
         """显示复习总结"""
@@ -885,6 +1156,10 @@ class RichCliUI:
         
         # 学习建议
         self.show_learning_suggestions(stats)
+
+        while True:
+            if Confirm.ask("返回主菜单", default=True):
+                break
     
     def show_learning_suggestions(self, stats: Dict[str, Any]):
         """显示学习建议"""
